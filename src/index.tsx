@@ -20,12 +20,16 @@ export { MIDI_CATALOG, DEFAULT_TRACK_ID, FALLBACK_TRACK, freemidiUrls } from './
 import { render } from 'ink';
 import { SnakeGame } from './SnakeGame.js';
 import type { SnakeColors } from './types.js';
+import type { MidiTrack } from './freemidi-catalog.js';
 
 interface RunSnakeGameOptions {
   music?: boolean;
   colors?: SnakeColors;
   cacheDir?: string;
   settingsFile?: string;
+  width?: number;
+  height?: number;
+  tracks?: MidiTrack[];
 }
 
 /**
@@ -40,6 +44,9 @@ export function runSnakeGame(options: RunSnakeGameOptions = {}): Promise<void> {
         colors={options.colors}
         cacheDir={options.cacheDir}
         settingsFile={options.settingsFile}
+        width={options.width}
+        height={options.height}
+        tracks={options.tracks}
         onExit={() => {
           app.unmount();
           resolve();

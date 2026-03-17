@@ -19,6 +19,8 @@ import {
   freemidiUrls,
 } from './freemidi-catalog.js';
 
+export type { MidiTrack };
+
 export interface SelectedTrack {
   title: string;
   artist: string;
@@ -71,10 +73,13 @@ interface MusicSettingsProps {
   onApply: (config: MusicConfig) => void;
   onCancel: () => void;
   accentColor?: string;
+  /** Track list to show in the browser. Defaults to the built-in MIDI_CATALOG. */
+  tracks?: MidiTrack[];
 }
 
-export const MusicSettings = ({ initial, onApply, onCancel, accentColor }: MusicSettingsProps) => {
+export const MusicSettings = ({ initial, onApply, onCancel, accentColor, tracks }: MusicSettingsProps) => {
   const accent = accentColor ?? DEFAULT_COLORS.accent;
+  const catalog = tracks ?? MIDI_CATALOG;
   const [section, setSection] = useState<Section>('tracks');
   const [voiceFocus, setVoiceFocus] = useState(0);
   const [volumes, setVolumes] = useState({
@@ -88,8 +93,8 @@ export const MusicSettings = ({ initial, onApply, onCancel, accentColor }: Music
   const [query, setQuery] = useState('');
   const scrollRef = useRef(0);
   const sorted = useMemo(
-    () => [...MIDI_CATALOG].sort((a, b) => a.title.localeCompare(b.title)),
-    [],
+    () => [...catalog].sort((a, b) => a.title.localeCompare(b.title)),
+    [catalog],
   );
   const [trackFocus, setTrackFocus] = useState(() => {
     const idx = sorted.findIndex((t) => t.id === DEFAULT_TRACK_ID);

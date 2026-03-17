@@ -24,23 +24,19 @@ import {
   startBgMusic, stopBgMusic, setMusicVolume, type BgMusicHandle,
 } from './snake-audio.js';
 import { MusicSettings, type MusicConfig, type SelectedTrack } from './MusicSettings.js';
-import { MIDI_CATALOG, DEFAULT_TRACK_ID, freemidiUrls } from './freemidi-catalog.js';
+import { MIDI_CATALOG, DEFAULT_TRACK_ID, freemidiUrls, type MidiTrack } from './freemidi-catalog.js';
 import { type SnakeColors, resolveColors } from './types.js';
 
 export type { SnakeColors };
 
-const _defaultTrack = MIDI_CATALOG.find((t) => t.id === DEFAULT_TRACK_ID)!;
-const _defaultUrls = freemidiUrls(_defaultTrack);
-const DEFAULT_TRACK: SelectedTrack = {
-  title: _defaultTrack.title,
-  artist: _defaultTrack.artist,
-  url: _defaultUrls.getter,
-  downloadPage: _defaultUrls.downloadPage,
-};
-
-const W = 20;
-const H = 10;
 const DEFAULT_BPM = 120;
+
+function resolveDefaultTrack(catalog: MidiTrack[]): SelectedTrack {
+  const entry = catalog.find((t) => t.id === DEFAULT_TRACK_ID) ?? catalog[0];
+  if (!entry) return { title: 'No tracks', artist: '', url: '' };
+  const urls = freemidiUrls(entry);
+  return { title: entry.title, artist: entry.artist, url: urls.getter, downloadPage: urls.downloadPage };
+}
 
 // ── Music visualizer ──────────────────────────────────────────────────
 
@@ -69,7 +65,6 @@ function MusicVisualizer({
   );
 }
 
-
 type Point = { x: number; y: number };
 type Dir = { dx: number; dy: number };
 
@@ -80,10 +75,10 @@ const DIRS = {
   right: { dx: 1, dy: 0 },
 } as const;
 
-function randomFood(snake: Point[]): Point {
+function randomFood(snake: Point[], w: number, h: number): Point {
   const free: Point[] = [];
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
       if (!snake.some((s) => s.x === x && s.y === y)) {
         free.push({ x, y });
       }
@@ -103,17 +98,15 @@ type GameState = {
   started: boolean;
 };
 
-function makeInitial(): GameState {
-  const snake = [
-    { x: 10, y: 5 },
-    { x: 9, y: 5 },
-    { x: 8, y: 5 },
-  ];
+function makeInitial(w: number, h: number): GameState {
+  const cx = Math.floor(w / 2);
+  const cy = Math.floor(h / 2);
+  const snake = [{ x: cx, y: cy }, { x: cx - 1, y: cy }, { x: cx - 2, y: cy }];
   return {
     snake,
     dir: DIRS.right,
     dirQueue: [],
-    food: randomFood(snake),
+    food: randomFood(snake, w, h),
     score: 0,
     gameOver: false,
     paused: false,
@@ -137,19 +130,38 @@ interface SnakeGameProps {
    * Defaults to ~/.snake-game.json
    */
   settingsFile?: string;
+  /** Grid width in cells (default: 20) */
+  width?: number;
+  /** Grid height in cells (default: 10) */
+  height?: number;
+  /**
+   * Track list shown in the music browser.
+   * Defaults to the built-in MIDI_CATALOG from freemidi.org.
+   */
+  tracks?: MidiTrack[];
 }
 
-export const SnakeGame = ({ onExit, music = true, colors, cacheDir, settingsFile }: SnakeGameProps = {}) => {
+export const SnakeGame = ({
+  onExit,
+  music = true,
+  colors,
+  cacheDir,
+  settingsFile,
+  width = 20,
+  height = 10,
+  tracks,
+}: SnakeGameProps = {}) => {
   const c = resolveColors(colors);
+  const catalog = tracks ?? MIDI_CATALOG;
 
-  const stateRef = useRef<GameState>(makeInitial());
+  const stateRef = useRef<GameState>(makeInitial(width, height));
   const [, forceUpdate] = useReducer((x: number) => x + 1, 0);
 
   const highScoreRef = useRef(0);
   const [highScore, setHighScore] = useState(0);
   const bgMusic = useRef<BgMusicHandle | null>(null);
   const [bpm, setBpm] = useState(DEFAULT_BPM);
-  const [track, setTrack] = useState<SelectedTrack>(DEFAULT_TRACK);
+  const [track, setTrack] = useState<SelectedTrack>(() => resolveDefaultTrack(catalog));
   const [showSettings, setShowSettings] = useState(false);
   const [beatPhase, setBeatPhase] = useState(0);
   const [musicVolume, setMusicVolumeState] = useState(() => getSnakeMusicVolume(settingsFile));
@@ -176,7 +188,7 @@ export const SnakeGame = ({ onExit, music = true, colors, cacheDir, settingsFile
   }, []);
 
   const reset = () => {
-    stateRef.current = { ...makeInitial(), started: true };
+    stateRef.current = { ...makeInitial(width, height), started: true };
     forceUpdate();
   };
 
@@ -195,17 +207,15 @@ export const SnakeGame = ({ onExit, music = true, colors, cacheDir, settingsFile
       const g = stateRef.current;
       if (!g.started || g.gameOver || g.paused) return;
 
-      // Consume next queued direction if available
       const [nextDir, ...restQueue] = g.dirQueue.length > 0 ? g.dirQueue : [g.dir];
       const dir = nextDir;
-
       const head = { x: g.snake[0].x + dir.dx, y: g.snake[0].y + dir.dy };
 
       if (
         head.x < 0 ||
-        head.x >= W ||
+        head.x >= width ||
         head.y < 0 ||
-        head.y >= H ||
+        head.y >= height ||
         g.snake.some((s) => s.x === head.x && s.y === head.y)
       ) {
         stateRef.current = { ...g, dir, dirQueue: restQueue, gameOver: true };
@@ -234,7 +244,7 @@ export const SnakeGame = ({ onExit, music = true, colors, cacheDir, settingsFile
         snake,
         dir,
         dirQueue: restQueue,
-        food: ate ? randomFood(snake) : g.food,
+        food: ate ? randomFood(snake, width, height) : g.food,
         score: newScore,
       };
       forceUpdate();
@@ -244,17 +254,13 @@ export const SnakeGame = ({ onExit, music = true, colors, cacheDir, settingsFile
   }, [bpm]);
 
   useInput((input) => {
-    if (showSettings) return; // settings panel handles its own input
+    if (showSettings) return;
 
     const g = stateRef.current;
 
-    if (input === 'q' && onExit) {
-      onExit();
-      return;
-    }
+    if (input === 'q' && onExit) { onExit(); return; }
 
     if (input === 'm' && music) {
-      // Pause while in settings
       if (g.started && !g.gameOver && !g.paused) {
         stateRef.current = { ...g, paused: true };
         forceUpdate();
@@ -268,25 +274,15 @@ export const SnakeGame = ({ onExit, music = true, colors, cacheDir, settingsFile
       return;
     }
 
-    if (input === ' ') {
-      stateRef.current = { ...g, paused: !g.paused };
-      forceUpdate();
-      return;
-    }
+    if (input === ' ') { stateRef.current = { ...g, paused: !g.paused }; forceUpdate(); return; }
+    if (input === 'r') { reset(); return; }
 
-    if (input === 'r') {
-      reset();
-      return;
-    }
-
-    // Check 180° against the last queued direction (or current if queue is empty)
     const lastDir = g.dirQueue[g.dirQueue.length - 1] ?? g.dir;
     let next: Dir | null = null;
-    if (input === 'w' && lastDir.dy !== 1) next = DIRS.up;
+    if (input === 'w' && lastDir.dy !== 1)  next = DIRS.up;
     else if (input === 's' && lastDir.dy !== -1) next = DIRS.down;
-    else if (input === 'a' && lastDir.dx !== 1) next = DIRS.left;
+    else if (input === 'a' && lastDir.dx !== 1)  next = DIRS.left;
     else if (input === 'd' && lastDir.dx !== -1) next = DIRS.right;
-    // Cap queue at 2 to avoid buffering too far ahead
     if (next && g.dirQueue.length < 2) {
       stateRef.current = { ...g, dirQueue: [...g.dirQueue, next] };
     }
@@ -297,6 +293,7 @@ export const SnakeGame = ({ onExit, music = true, colors, cacheDir, settingsFile
       <MusicSettings
         initial={{ track, musicVolume, tinkVolume, sfxVolume }}
         accentColor={c.accent}
+        tracks={catalog}
         onApply={(cfg: MusicConfig) => {
           if (cfg.musicVolume !== musicVolume && bgMusic.current) {
             bgMusic.current = setMusicVolume(bgMusic.current, cfg.musicVolume);
@@ -323,8 +320,8 @@ export const SnakeGame = ({ onExit, music = true, colors, cacheDir, settingsFile
 
   const { snake, food, score, gameOver, paused, started } = stateRef.current;
 
-  const cells = Array.from({ length: H }, (_, y) =>
-    Array.from({ length: W }, (_, x) => {
+  const cells = Array.from({ length: height }, (_, y) =>
+    Array.from({ length: width }, (_, x) => {
       if (x === snake[0]?.x && y === snake[0]?.y) return 'head';
       if (snake.some((s) => s.x === x && s.y === y)) return 'body';
       if (x === food.x && y === food.y) return 'food';
@@ -336,14 +333,8 @@ export const SnakeGame = ({ onExit, music = true, colors, cacheDir, settingsFile
     <Box flexDirection="column" paddingX={1}>
       <Box gap={2}>
         <Text bold color={c.accent}>Snake</Text>
-        <Text dimColor>
-          Score: <Text bold>{score}</Text>
-        </Text>
-        {highScore > 0 && (
-          <Text dimColor>
-            Best: <Text bold>{highScore}</Text>
-          </Text>
-        )}
+        <Text dimColor>Score: <Text bold>{score}</Text></Text>
+        {highScore > 0 && <Text dimColor>Best: <Text bold>{highScore}</Text></Text>}
         {paused && <Text color="yellow"> PAUSED</Text>}
       </Box>
       {music && (
@@ -359,7 +350,7 @@ export const SnakeGame = ({ onExit, music = true, colors, cacheDir, settingsFile
       )}
       <Box height={1} />
       <Box flexDirection="column">
-        <Text dimColor>{'┌' + '──'.repeat(W) + '┐'}</Text>
+        <Text dimColor>{'┌' + '──'.repeat(width) + '┐'}</Text>
         {cells.map((row, y) => (
           <Box key={y}>
             <Text dimColor>│</Text>
@@ -372,7 +363,7 @@ export const SnakeGame = ({ onExit, music = true, colors, cacheDir, settingsFile
             <Text dimColor>│</Text>
           </Box>
         ))}
-        <Text dimColor>{'└' + '──'.repeat(W) + '┘'}</Text>
+        <Text dimColor>{'└' + '──'.repeat(width) + '┘'}</Text>
       </Box>
       <Box height={1} />
       {!started && (
@@ -394,14 +385,8 @@ export const SnakeGame = ({ onExit, music = true, colors, cacheDir, settingsFile
           WASD to move · Space to pause · R to restart{music ? ' · M for music' : ''}
         </Text>
       )}
-      {!started && music && (
-        <Text dimColor>M to change music</Text>
-      )}
-      {onExit && (
-        <Text dimColor>
-          Press <Text bold>Q</Text> to exit
-        </Text>
-      )}
+      {!started && music && <Text dimColor>M to change music</Text>}
+      {onExit && <Text dimColor>Press <Text bold>Q</Text> to exit</Text>}
     </Box>
   );
 };

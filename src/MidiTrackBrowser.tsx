@@ -49,14 +49,17 @@ function fallbackSelected(): SelectedTrack {
 interface MidiTrackBrowserProps {
   onSelect: (track: SelectedTrack) => void;
   onCancel: () => void;
+  /** Track list to browse. Defaults to the built-in MIDI_CATALOG. */
+  tracks?: MidiTrack[];
 }
 
-export const MidiTrackBrowser = ({ onSelect, onCancel }: MidiTrackBrowserProps) => {
+export const MidiTrackBrowser = ({ onSelect, onCancel, tracks }: MidiTrackBrowserProps) => {
+  const catalog = tracks ?? MIDI_CATALOG;
   const [query, setQuery] = useState('');
   const scrollRef = useRef(0);
   const sorted = useMemo(
-    () => [...MIDI_CATALOG].sort((a, b) => a.title.localeCompare(b.title)),
-    [],
+    () => [...catalog].sort((a, b) => a.title.localeCompare(b.title)),
+    [catalog],
   );
 
   const [focused, setFocused] = useState(() => {
