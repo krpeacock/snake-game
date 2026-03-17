@@ -23,6 +23,8 @@
     "prebuild": "pnpm clean",
     "build": "pnpm tsc",
     "postbuild": "chmod +x ./dist/bin.js && cp scripts/snake-synth.mjs dist/",
+    "link": "pnpm link --global",
+    "build:link": "pnpm build && pnpm link --global",
     "try": "tsx bin.tsx",
     "start": "node dist/bin.js"
   },
