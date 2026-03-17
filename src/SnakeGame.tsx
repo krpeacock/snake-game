@@ -132,9 +132,14 @@ interface SnakeGameProps {
    * Defaults to the OS temp directory.
    */
   cacheDir?: string;
+  /**
+   * Path to the JSON file used to persist settings (high score, volumes).
+   * Defaults to ~/.snake-game.json
+   */
+  settingsFile?: string;
 }
 
-export const SnakeGame = ({ onExit, music = true, colors, cacheDir }: SnakeGameProps = {}) => {
+export const SnakeGame = ({ onExit, music = true, colors, cacheDir, settingsFile }: SnakeGameProps = {}) => {
   const c = resolveColors(colors);
 
   const stateRef = useRef<GameState>(makeInitial());
@@ -147,9 +152,9 @@ export const SnakeGame = ({ onExit, music = true, colors, cacheDir }: SnakeGameP
   const [track, setTrack] = useState<SelectedTrack>(DEFAULT_TRACK);
   const [showSettings, setShowSettings] = useState(false);
   const [beatPhase, setBeatPhase] = useState(0);
-  const [musicVolume, setMusicVolumeState] = useState(() => getSnakeMusicVolume());
-  const [tinkVolume,  setTinkVolumeState]  = useState(() => getSnakeTinkVolume());
-  const [sfxVolume,   setSfxVolumeState]   = useState(() => getSnakeSfxVolume());
+  const [musicVolume, setMusicVolumeState] = useState(() => getSnakeMusicVolume(settingsFile));
+  const [tinkVolume,  setTinkVolumeState]  = useState(() => getSnakeTinkVolume(settingsFile));
+  const [sfxVolume,   setSfxVolumeState]   = useState(() => getSnakeSfxVolume(settingsFile));
 
   useEffect(() => {
     if (!music) return;
@@ -165,7 +170,7 @@ export const SnakeGame = ({ onExit, music = true, colors, cacheDir }: SnakeGameP
   }, [track, music]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const saved = getSnakeHighScore();
+    const saved = getSnakeHighScore(settingsFile);
     highScoreRef.current = saved;
     setHighScore(saved);
   }, []);
@@ -216,7 +221,7 @@ export const SnakeGame = ({ onExit, music = true, colors, cacheDir }: SnakeGameP
       if (ate) {
         if (newScore > highScoreRef.current) {
           highScoreRef.current = newScore;
-          setSnakeHighScore(newScore);
+          setSnakeHighScore(newScore, settingsFile);
           setHighScore(newScore);
         }
         if (music) playSystemSound(SYSTEM_SOUNDS.eat, sfxVolume);
@@ -297,15 +302,15 @@ export const SnakeGame = ({ onExit, music = true, colors, cacheDir }: SnakeGameP
             bgMusic.current = setMusicVolume(bgMusic.current, cfg.musicVolume);
           }
           if (cfg.musicVolume !== musicVolume) {
-            setSnakeMusicVolume(cfg.musicVolume);
+            setSnakeMusicVolume(cfg.musicVolume, settingsFile);
             setMusicVolumeState(cfg.musicVolume);
           }
           if (cfg.tinkVolume !== tinkVolume) {
-            setSnakeTinkVolume(cfg.tinkVolume);
+            setSnakeTinkVolume(cfg.tinkVolume, settingsFile);
             setTinkVolumeState(cfg.tinkVolume);
           }
           if (cfg.sfxVolume !== sfxVolume) {
-            setSnakeSfxVolume(cfg.sfxVolume);
+            setSnakeSfxVolume(cfg.sfxVolume, settingsFile);
             setSfxVolumeState(cfg.sfxVolume);
           }
           if (cfg.track.url !== track.url) setTrack(cfg.track);

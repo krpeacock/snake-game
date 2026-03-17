@@ -25,6 +25,7 @@ interface RunSnakeGameOptions {
   music?: boolean;
   colors?: SnakeColors;
   cacheDir?: string;
+  settingsFile?: string;
 }
 
 /**
@@ -38,6 +39,7 @@ export function runSnakeGame(options: RunSnakeGameOptions = {}): Promise<void> {
         music={options.music}
         colors={options.colors}
         cacheDir={options.cacheDir}
+        settingsFile={options.settingsFile}
         onExit={() => {
           app.unmount();
           resolve();
