@@ -9,7 +9,6 @@
 
 import { Box, Text, useInput } from 'ink';
 import { useReducer, useRef, useEffect, useState } from 'react';
-import { Colors } from './styles.js';
 import {
   getSnakeHighScore,
   setSnakeHighScore,
@@ -26,6 +25,9 @@ import {
 } from './snake-audio.js';
 import { MusicSettings, type MusicConfig, type SelectedTrack } from './MusicSettings.js';
 import { MIDI_CATALOG, DEFAULT_TRACK_ID, freemidiUrls } from './freemidi-catalog.js';
+import { type SnakeColors, resolveColors } from './types.js';
+
+export type { SnakeColors };
 
 const _defaultTrack = MIDI_CATALOG.find((t) => t.id === DEFAULT_TRACK_ID)!;
 const _defaultUrls = freemidiUrls(_defaultTrack);
@@ -42,9 +44,15 @@ const DEFAULT_BPM = 120;
 
 // ── Music visualizer ──────────────────────────────────────────────────
 
-const BEAT_COLORS = ['#55cdfc', '#ffffff', '#f7a8b8', '#ffffff'] as const;
-
-function MusicVisualizer({ beatPhase, active }: { beatPhase: number; active: boolean }) {
+function MusicVisualizer({
+  beatPhase,
+  active,
+  beatColors,
+}: {
+  beatPhase: number;
+  active: boolean;
+  beatColors: [string, string, string, string];
+}) {
   const beat = Math.floor(beatPhase / 4) % 4;
 
   return (
@@ -52,7 +60,7 @@ function MusicVisualizer({ beatPhase, active }: { beatPhase: number; active: boo
       {([0, 1, 2, 3] as const).map((b) => {
         const isCurrent = active && b === beat;
         return (
-          <Text key={b} color={isCurrent ? BEAT_COLORS[b] : undefined} dimColor={!isCurrent}>
+          <Text key={b} color={isCurrent ? beatColors[b] : undefined} dimColor={!isCurrent}>
             {isCurrent ? '●' : '○'}{' '}
           </Text>
         );
@@ -115,9 +123,15 @@ function makeInitial(): GameState {
 
 interface SnakeGameProps {
   onExit?: () => void;
+  /** Enable or disable all audio (default: true) */
+  music?: boolean;
+  /** Override any of the game's colors */
+  colors?: SnakeColors;
 }
 
-export const SnakeGame = ({ onExit }: SnakeGameProps = {}) => {
+export const SnakeGame = ({ onExit, music = true, colors }: SnakeGameProps = {}) => {
+  const c = resolveColors(colors);
+
   const stateRef = useRef<GameState>(makeInitial());
   const [, forceUpdate] = useReducer((x: number) => x + 1, 0);
 
@@ -133,6 +147,7 @@ export const SnakeGame = ({ onExit }: SnakeGameProps = {}) => {
   const [sfxVolume,   setSfxVolumeState]   = useState(() => getSnakeSfxVolume());
 
   useEffect(() => {
+    if (!music) return;
     warmNotes([69]);
     stopBgMusic(bgMusic.current);
     bgMusic.current = null;
@@ -142,7 +157,7 @@ export const SnakeGame = ({ onExit }: SnakeGameProps = {}) => {
       if (handle) setBpm(handle.bpm);
     });
     return () => { stopBgMusic(bgMusic.current); };
-  }, [track]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [track, music]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const saved = getSnakeHighScore();
@@ -157,12 +172,13 @@ export const SnakeGame = ({ onExit }: SnakeGameProps = {}) => {
 
   // Beat phase for music visualizer — runs independently of game state
   useEffect(() => {
+    if (!music) return;
     const tickMs = Math.round((60_000 / bpm) / 4);
     const id = setInterval(() => setBeatPhase((p) => (p + 1) % 16), tickMs);
     return () => clearInterval(id);
-  }, [bpm]);
+  }, [bpm, music]);
 
-  // Interval recreates when bpm changes (i.e. once synthesis completes)
+  // Game loop — interval recreates when bpm changes (once synthesis completes)
   useEffect(() => {
     const tickMs = Math.round((60_000 / bpm) / 4); // one 16th note
     const id = setInterval(() => {
@@ -183,7 +199,7 @@ export const SnakeGame = ({ onExit }: SnakeGameProps = {}) => {
         g.snake.some((s) => s.x === head.x && s.y === head.y)
       ) {
         stateRef.current = { ...g, dir, dirQueue: restQueue, gameOver: true };
-        playSystemSound(SYSTEM_SOUNDS.die, sfxVolume);
+        if (music) playSystemSound(SYSTEM_SOUNDS.die, sfxVolume);
         forceUpdate();
         return;
       }
@@ -198,9 +214,9 @@ export const SnakeGame = ({ onExit }: SnakeGameProps = {}) => {
           setSnakeHighScore(newScore);
           setHighScore(newScore);
         }
-        playSystemSound(SYSTEM_SOUNDS.eat, sfxVolume);
+        if (music) playSystemSound(SYSTEM_SOUNDS.eat, sfxVolume);
       } else {
-        playNote(69, tinkVolume);
+        if (music) playNote(69, tinkVolume);
       }
 
       stateRef.current = {
@@ -227,7 +243,7 @@ export const SnakeGame = ({ onExit }: SnakeGameProps = {}) => {
       return;
     }
 
-    if (input === 'm') {
+    if (input === 'm' && music) {
       // Pause while in settings
       if (g.started && !g.gameOver && !g.paused) {
         stateRef.current = { ...g, paused: true };
@@ -270,8 +286,8 @@ export const SnakeGame = ({ onExit }: SnakeGameProps = {}) => {
     return (
       <MusicSettings
         initial={{ track, musicVolume, tinkVolume, sfxVolume }}
+        accentColor={c.accent}
         onApply={(cfg: MusicConfig) => {
-          // Apply volume changes — restart afplay if music volume changed
           if (cfg.musicVolume !== musicVolume && bgMusic.current) {
             bgMusic.current = setMusicVolume(bgMusic.current, cfg.musicVolume);
           }
@@ -297,7 +313,6 @@ export const SnakeGame = ({ onExit }: SnakeGameProps = {}) => {
 
   const { snake, food, score, gameOver, paused, started } = stateRef.current;
 
-
   const cells = Array.from({ length: H }, (_, y) =>
     Array.from({ length: W }, (_, x) => {
       if (x === snake[0]?.x && y === snake[0]?.y) return 'head';
@@ -310,9 +325,7 @@ export const SnakeGame = ({ onExit }: SnakeGameProps = {}) => {
   return (
     <Box flexDirection="column" paddingX={1}>
       <Box gap={2}>
-        <Text bold color={Colors.accent}>
-          Snake
-        </Text>
+        <Text bold color={c.accent}>Snake</Text>
         <Text dimColor>
           Score: <Text bold>{score}</Text>
         </Text>
@@ -323,13 +336,17 @@ export const SnakeGame = ({ onExit }: SnakeGameProps = {}) => {
         )}
         {paused && <Text color="yellow"> PAUSED</Text>}
       </Box>
-      <Box gap={1}>
-        <Text dimColor>♪</Text>
-        <Text dimColor>{track.title}</Text>
-        <Text dimColor>—</Text>
-        <Text dimColor>{track.artist}</Text>
-      </Box>
-      <MusicVisualizer beatPhase={beatPhase} active={started && !paused && !gameOver} />
+      {music && (
+        <>
+          <Box gap={1}>
+            <Text dimColor>♪</Text>
+            <Text dimColor>{track.title}</Text>
+            <Text dimColor>—</Text>
+            <Text dimColor>{track.artist}</Text>
+          </Box>
+          <MusicVisualizer beatPhase={beatPhase} active={started && !paused && !gameOver} beatColors={c.beat} />
+        </>
+      )}
       <Box height={1} />
       <Box flexDirection="column">
         <Text dimColor>{'┌' + '──'.repeat(W) + '┐'}</Text>
@@ -337,9 +354,9 @@ export const SnakeGame = ({ onExit }: SnakeGameProps = {}) => {
           <Box key={y}>
             <Text dimColor>│</Text>
             {row.map((cell, x) => {
-              if (cell === 'head') return <Text key={x} color="#f7a8b8" bold>{'● '}</Text>;
-              if (cell === 'body') return <Text key={x} color="#ffffff">{'● '}</Text>;
-              if (cell === 'food') return <Text key={x} color="#55cdfc">{'◆ '}</Text>;
+              if (cell === 'head') return <Text key={x} color={c.head} bold>{'● '}</Text>;
+              if (cell === 'body') return <Text key={x} color={c.body}>{'● '}</Text>;
+              if (cell === 'food') return <Text key={x} color={c.food}>{'◆ '}</Text>;
               return <Text key={x} dimColor>{'· '}</Text>;
             })}
             <Text dimColor>│</Text>
@@ -350,22 +367,24 @@ export const SnakeGame = ({ onExit }: SnakeGameProps = {}) => {
       <Box height={1} />
       {!started && (
         <Text dimColor>
-          Press <Text bold color={Colors.accent}>Space</Text> or{' '}
-          <Text bold color={Colors.accent}>R</Text> to start
+          Press <Text bold color={c.accent}>Space</Text> or{' '}
+          <Text bold color={c.accent}>R</Text> to start
         </Text>
       )}
       {gameOver && (
         <Text>
           <Text color="red">Game over! </Text>
           <Text dimColor>Press </Text>
-          <Text bold color={Colors.accent}>R</Text>
+          <Text bold color={c.accent}>R</Text>
           <Text dimColor> to restart</Text>
         </Text>
       )}
       {started && !gameOver && (
-        <Text dimColor>WASD to move · Space to pause · R to restart · M for music</Text>
+        <Text dimColor>
+          WASD to move · Space to pause · R to restart{music ? ' · M for music' : ''}
+        </Text>
       )}
-      {!started && (
+      {!started && music && (
         <Text dimColor>M to change music</Text>
       )}
       {onExit && (

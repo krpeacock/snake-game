@@ -10,7 +10,7 @@
 
 import { Box, Text, useInput } from 'ink';
 import { useState, useMemo, useRef } from 'react';
-import { Colors } from './styles.js';
+import { DEFAULT_COLORS } from './types.js';
 import {
   MIDI_CATALOG,
   FALLBACK_TRACK,
@@ -70,9 +70,11 @@ interface MusicSettingsProps {
   initial: MusicConfig;
   onApply: (config: MusicConfig) => void;
   onCancel: () => void;
+  accentColor?: string;
 }
 
-export const MusicSettings = ({ initial, onApply, onCancel }: MusicSettingsProps) => {
+export const MusicSettings = ({ initial, onApply, onCancel, accentColor }: MusicSettingsProps) => {
+  const accent = accentColor ?? DEFAULT_COLORS.accent;
   const [section, setSection] = useState<Section>('tracks');
   const [voiceFocus, setVoiceFocus] = useState(0);
   const [volumes, setVolumes] = useState({
@@ -157,11 +159,11 @@ export const MusicSettings = ({ initial, onApply, onCancel }: MusicSettingsProps
     <Box flexDirection="column" paddingX={1}>
       {/* Header */}
       <Box gap={3} marginBottom={1}>
-        <Text bold color={Colors.accent}>Music Settings</Text>
+        <Text bold color={accent}>Music Settings</Text>
         <Box gap={1}>
           <Text
             bold={section === 'tracks'}
-            color={section === 'tracks' ? Colors.accent : undefined}
+            color={section === 'tracks' ? accent : undefined}
             dimColor={section !== 'tracks'}
           >
             Tracks
@@ -169,7 +171,7 @@ export const MusicSettings = ({ initial, onApply, onCancel }: MusicSettingsProps
           <Text dimColor>·</Text>
           <Text
             bold={section === 'volumes'}
-            color={section === 'volumes' ? Colors.accent : undefined}
+            color={section === 'volumes' ? accent : undefined}
             dimColor={section !== 'volumes'}
           >
             Volumes
@@ -185,15 +187,15 @@ export const MusicSettings = ({ initial, onApply, onCancel }: MusicSettingsProps
             const val = volumes[voice.key];
             return (
               <Box key={voice.key} gap={2}>
-                <Text color={isFocused ? Colors.accent : undefined} dimColor={!isFocused}>
+                <Text color={isFocused ? accent : undefined} dimColor={!isFocused}>
                   {isFocused ? '▶' : ' '}
                 </Text>
                 <Box width={18}>
-                  <Text color={isFocused ? Colors.accent : undefined} dimColor={!isFocused}>
+                  <Text color={isFocused ? accent : undefined} dimColor={!isFocused}>
                     {voice.label}
                   </Text>
                 </Box>
-                <Text color={isFocused ? Colors.accent : undefined} dimColor={!isFocused}>
+                <Text color={isFocused ? accent : undefined} dimColor={!isFocused}>
                   {volBar(val)}
                 </Text>
                 <Text dimColor>{fmtPct(val)}</Text>
@@ -213,12 +215,12 @@ export const MusicSettings = ({ initial, onApply, onCancel }: MusicSettingsProps
         <Box flexDirection="column">
           <Box gap={1} marginBottom={1}>
             <Text dimColor>Now playing:</Text>
-            <Text color={Colors.accent}>{selectedTrack.title}</Text>
+            <Text color={accent}>{selectedTrack.title}</Text>
             <Text dimColor>— {selectedTrack.artist}</Text>
           </Box>
           <Box gap={1} marginBottom={1}>
             <Text dimColor>Search:</Text>
-            <Text color={Colors.accent}>{query || ' '}</Text>
+            <Text color={accent}>{query || ' '}</Text>
             <Text dimColor>▌</Text>
           </Box>
           {filtered.length === 0 ? (
@@ -231,10 +233,10 @@ export const MusicSettings = ({ initial, onApply, onCancel }: MusicSettingsProps
                 const isFocused = idx === safeFocus;
                 return (
                   <Box key={track.id} gap={1}>
-                    <Text color={isFocused ? Colors.accent : undefined} dimColor={!isFocused}>
+                    <Text color={isFocused ? accent : undefined} dimColor={!isFocused}>
                       {isFocused ? '▶' : ' '}
                     </Text>
-                    <Text color={isFocused ? Colors.accent : undefined} bold={isFocused} dimColor={!isFocused}>
+                    <Text color={isFocused ? accent : undefined} bold={isFocused} dimColor={!isFocused}>
                       {track.title}
                     </Text>
                     <Text dimColor>— {track.artist}</Text>
