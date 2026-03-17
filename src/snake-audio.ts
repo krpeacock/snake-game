@@ -19,17 +19,19 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const SOUNDS_DIR = join(tmpdir(), 'snake-game-sounds');
-
 // Resolve the synth script: dist/snake-synth.mjs (built) or scripts/snake-synth.mjs (dev)
 const __dir = dirname(fileURLToPath(import.meta.url));
 const _buildPath = join(__dir, '../snake-synth.mjs');
 const _devPath   = join(__dir, '../scripts/snake-synth.mjs');
 const SYNTH_SCRIPT = existsSync(_buildPath) ? _buildPath : _devPath;
 
-function wavCachePath(midiUrl: string): string {
+function soundsDir(cacheDir?: string): string {
+  return join(cacheDir ?? tmpdir(), 'snake-game-sounds');
+}
+
+function wavCachePath(midiUrl: string, cacheDir?: string): string {
   const name = midiUrl.split('/').pop()?.replace(/\W/g, '_') ?? 'midi';
-  return join(tmpdir(), `snake-game-${name}.wav`);
+  return join(cacheDir ?? tmpdir(), `snake-game-${name}.wav`);
 }
 
 // ── freemidi.org two-step MIDI fetch ─────────────────────────────────
@@ -89,10 +91,11 @@ export async function startBgMusic(
   midiUrl: string,
   downloadPage?: string,
   volume = 0.4,
+  cacheDir?: string,
 ): Promise<BgMusicHandle | null> {
   if (process.platform !== 'darwin') return null;
 
-  const wavPath = wavCachePath(midiUrl);
+  const wavPath = wavCachePath(midiUrl, cacheDir);
   let bpm = 120;
 
   try {
@@ -165,20 +168,24 @@ function buildWav(freq: number): Buffer {
   return buf;
 }
 
-function noteFile(note: number): string { return join(SOUNDS_DIR, `note-${note}.wav`); }
+function noteFile(note: number, cacheDir?: string): string {
+  return join(soundsDir(cacheDir), `note-${note}.wav`);
+}
 
-export function warmNotes(notes: number[]): void {
-  mkdirSync(SOUNDS_DIR, { recursive: true });
+export function warmNotes(notes: number[], cacheDir?: string): void {
+  const dir = soundsDir(cacheDir);
+  mkdirSync(dir, { recursive: true });
   for (const note of [...new Set(notes)]) {
-    const path = noteFile(note);
+    const path = noteFile(note, cacheDir);
     if (!existsSync(path)) writeFileSync(path, buildWav(midiToFreq(note)));
   }
 }
 
-export function playNote(note: number, volume = 1): void {
+export function playNote(note: number, volume = 1, cacheDir?: string): void {
   if (process.platform !== 'darwin') { process.stdout.write('\x07'); return; }
-  const path = noteFile(note);
-  if (!existsSync(path)) { mkdirSync(SOUNDS_DIR, { recursive: true }); writeFileSync(path, buildWav(midiToFreq(note))); }
+  const dir = soundsDir(cacheDir);
+  const path = noteFile(note, cacheDir);
+  if (!existsSync(path)) { mkdirSync(dir, { recursive: true }); writeFileSync(path, buildWav(midiToFreq(note))); }
   spawn('afplay', [path, '-v', String(volume)], { detached: true, stdio: 'ignore' }).unref();
 }
 

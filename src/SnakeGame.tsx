@@ -127,9 +127,14 @@ interface SnakeGameProps {
   music?: boolean;
   /** Override any of the game's colors */
   colors?: SnakeColors;
+  /**
+   * Directory for cached audio files (synthesized WAVs and per-note tinks).
+   * Defaults to the OS temp directory.
+   */
+  cacheDir?: string;
 }
 
-export const SnakeGame = ({ onExit, music = true, colors }: SnakeGameProps = {}) => {
+export const SnakeGame = ({ onExit, music = true, colors, cacheDir }: SnakeGameProps = {}) => {
   const c = resolveColors(colors);
 
   const stateRef = useRef<GameState>(makeInitial());
@@ -148,11 +153,11 @@ export const SnakeGame = ({ onExit, music = true, colors }: SnakeGameProps = {})
 
   useEffect(() => {
     if (!music) return;
-    warmNotes([69]);
+    warmNotes([69], cacheDir);
     stopBgMusic(bgMusic.current);
     bgMusic.current = null;
     setBpm(DEFAULT_BPM);
-    void startBgMusic(track.url, track.downloadPage, musicVolume).then((handle) => {
+    void startBgMusic(track.url, track.downloadPage, musicVolume, cacheDir).then((handle) => {
       bgMusic.current = handle;
       if (handle) setBpm(handle.bpm);
     });
@@ -216,7 +221,7 @@ export const SnakeGame = ({ onExit, music = true, colors }: SnakeGameProps = {})
         }
         if (music) playSystemSound(SYSTEM_SOUNDS.eat, sfxVolume);
       } else {
-        if (music) playNote(69, tinkVolume);
+        if (music) playNote(69, tinkVolume, cacheDir);
       }
 
       stateRef.current = {

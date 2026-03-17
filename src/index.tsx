@@ -24,6 +24,7 @@ import type { SnakeColors } from './types.js';
 interface RunSnakeGameOptions {
   music?: boolean;
   colors?: SnakeColors;
+  cacheDir?: string;
 }
 
 /**
@@ -36,6 +37,7 @@ export function runSnakeGame(options: RunSnakeGameOptions = {}): Promise<void> {
       <SnakeGame
         music={options.music}
         colors={options.colors}
+        cacheDir={options.cacheDir}
         onExit={() => {
           app.unmount();
           resolve();
