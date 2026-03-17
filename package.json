@@ -6,8 +6,14 @@
   "bin": {
     "snake-game": "dist/bin.js"
   },
-  "main": "dist/src/SnakeGame.js",
-  "typings": "dist/src/SnakeGame.d.ts",
+  "main": "dist/src/index.js",
+  "typings": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/src/index.js",
+      "types": "./dist/src/index.d.ts"
+    }
+  },
   "files": [
     "dist/",
     "package.json"
@@ -21,13 +27,17 @@
     "start": "node dist/bin.js"
   },
   "dependencies": {
-    "ink": "^6.8.0",
-    "midi-file": "^1.2.4",
-    "react": "^19.2.4"
+    "midi-file": "^1.2.4"
+  },
+  "peerDependencies": {
+    "ink": ">=4.0.0",
+    "react": ">=18.0.0"
   },
   "devDependencies": {
     "@types/node": "^18.19.76",
     "@types/react": "^19.2.14",
+    "ink": "^6.8.0",
+    "react": "^19.2.4",
     "tsx": "^4.20.3",
     "typescript": "^5.0.4"
   },
