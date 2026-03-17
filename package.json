@@ -1,0 +1,37 @@
+{
+  "name": "snake-game",
+  "version": "1.0.0",
+  "description": "Playable Snake in the terminal with MIDI music",
+  "type": "module",
+  "bin": {
+    "snake-game": "dist/bin.js"
+  },
+  "main": "dist/src/SnakeGame.js",
+  "typings": "dist/src/SnakeGame.d.ts",
+  "files": [
+    "dist/",
+    "package.json"
+  ],
+  "scripts": {
+    "clean": "rm -rf ./dist",
+    "prebuild": "pnpm clean",
+    "build": "pnpm tsc",
+    "postbuild": "chmod +x ./dist/bin.js && cp scripts/snake-synth.mjs dist/",
+    "try": "tsx bin.tsx",
+    "start": "node dist/bin.js"
+  },
+  "dependencies": {
+    "ink": "^6.8.0",
+    "midi-file": "^1.2.4",
+    "react": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.76",
+    "@types/react": "^19.2.14",
+    "tsx": "^4.20.3",
+    "typescript": "^5.0.4"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
