@@ -7,7 +7,7 @@
  * the game loop never captures stale closure values.
  */
 
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, type Key } from 'ink';
 import { useReducer, useRef, useEffect, useState } from 'react';
 import {
   getSnakeHighScore,
@@ -25,11 +25,37 @@ import {
 } from './snake-audio.js';
 import { MusicSettings, type MusicConfig, type SelectedTrack } from './MusicSettings.js';
 import { MIDI_CATALOG, DEFAULT_TRACK_ID, freemidiUrls, type MidiTrack } from './freemidi-catalog.js';
-import { type SnakeColors, resolveColors } from './types.js';
+import { type SnakeColors, resolveColors, type SnakeKeybindings, resolveKeybindings } from './types.js';
 
-export type { SnakeColors };
+export type { SnakeColors, SnakeKeybindings };
 
 const DEFAULT_BPM = 120;
+
+// Maps keybinding token strings to Ink Key property names
+const ARROW_KEY_MAP: Record<string, keyof Key> = {
+  up: 'upArrow', down: 'downArrow', left: 'leftArrow', right: 'rightArrow',
+  return: 'return', escape: 'escape', tab: 'tab',
+};
+
+function pressed(bindings: string[], input: string, key: Key): boolean {
+  return bindings.some((b) => {
+    const prop = ARROW_KEY_MAP[b];
+    return prop ? (key[prop] as boolean) === true : input === b;
+  });
+}
+
+const KEY_LABELS: Record<string, string> = {
+  up: '↑', down: '↓', left: '←', right: '→',
+  return: '↵', escape: 'Esc', tab: 'Tab', ' ': 'Space',
+};
+function randomOtherTrack(catalog: MidiTrack[], currentUrl: string): MidiTrack | null {
+  const others = catalog.filter((t) => freemidiUrls(t).getter !== currentUrl);
+  return others.length > 0 ? (others[Math.floor(Math.random() * others.length)] ?? null) : null;
+}
+
+function displayKey(k: string): string {
+  return KEY_LABELS[k] ?? k.toUpperCase();
+}
 
 function resolveDefaultTrack(catalog: MidiTrack[]): SelectedTrack {
   const entry = catalog.find((t) => t.id === DEFAULT_TRACK_ID) ?? catalog[0];
@@ -139,6 +165,13 @@ interface SnakeGameProps {
    * Defaults to the built-in MIDI_CATALOG from freemidi.org.
    */
   tracks?: MidiTrack[];
+  /**
+   * Override individual key bindings.
+   * Each action accepts an array of keys. Use plain characters ('w', ' ', 'r')
+   * or arrow-key tokens: 'up', 'down', 'left', 'right', 'return', 'escape'.
+   * Defaults include both WASD and arrow keys for movement.
+   */
+  keybindings?: SnakeKeybindings;
 }
 
 export const SnakeGame = ({
@@ -150,8 +183,10 @@ export const SnakeGame = ({
   width = 20,
   height = 10,
   tracks,
+  keybindings,
 }: SnakeGameProps = {}) => {
   const c = resolveColors(colors);
+  const kb = resolveKeybindings(keybindings);
   const catalog = tracks ?? MIDI_CATALOG;
 
   const stateRef = useRef<GameState>(makeInitial(width, height));
@@ -163,10 +198,23 @@ export const SnakeGame = ({
   const [bpm, setBpm] = useState(DEFAULT_BPM);
   const [track, setTrack] = useState<SelectedTrack>(() => resolveDefaultTrack(catalog));
   const [showSettings, setShowSettings] = useState(false);
+  const autoPlayRef = useRef(true);
+  const nextTrackRef = useRef<() => void>(() => {});
   const [beatPhase, setBeatPhase] = useState(0);
   const [musicVolume, setMusicVolumeState] = useState(() => getSnakeMusicVolume(settingsFile));
   const [tinkVolume,  setTinkVolumeState]  = useState(() => getSnakeTinkVolume(settingsFile));
   const [sfxVolume,   setSfxVolumeState]   = useState(() => getSnakeSfxVolume(settingsFile));
+
+  // Keep nextTrackRef pointed at a stable "advance to next track" callback
+  useEffect(() => {
+    nextTrackRef.current = () => {
+      const entry = randomOtherTrack(catalog, track.url);
+      if (entry) {
+        const urls = freemidiUrls(entry);
+        setTrack({ title: entry.title, artist: entry.artist, url: urls.getter, downloadPage: urls.downloadPage });
+      }
+    };
+  }, [track, catalog]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!music) return;
@@ -174,11 +222,24 @@ export const SnakeGame = ({
     stopBgMusic(bgMusic.current);
     bgMusic.current = null;
     setBpm(DEFAULT_BPM);
+    autoPlayRef.current = true;
+    let cancelled = false;
     void startBgMusic(track.url, track.downloadPage, musicVolume, cacheDir).then((handle) => {
+      if (cancelled) { stopBgMusic(handle); return; }
       bgMusic.current = handle;
-      if (handle) setBpm(handle.bpm);
+      if (handle) {
+        setBpm(handle.bpm);
+        handle.proc.on('exit', (_code, signal) => {
+          if (signal == null && autoPlayRef.current) nextTrackRef.current();
+        });
+      }
     });
-    return () => { stopBgMusic(bgMusic.current); };
+    return () => {
+      cancelled = true;
+      autoPlayRef.current = false;
+      stopBgMusic(bgMusic.current);
+      bgMusic.current = null;
+    };
   }, [track, music]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -253,14 +314,14 @@ export const SnakeGame = ({
     return () => clearInterval(id);
   }, [bpm]);
 
-  useInput((input) => {
+  useInput((input, key) => {
     if (showSettings) return;
 
     const g = stateRef.current;
 
-    if (input === 'q' && onExit) { onExit(); return; }
+    if (pressed(kb.quit, input, key) && onExit) { onExit(); return; }
 
-    if (input === 'm' && music) {
+    if (pressed(kb.music, input, key) && music) {
       if (g.started && !g.gameOver && !g.paused) {
         stateRef.current = { ...g, paused: true };
         forceUpdate();
@@ -269,20 +330,38 @@ export const SnakeGame = ({
       return;
     }
 
+    if (music) {
+      const goToTrack = (entry: MidiTrack) => {
+        const urls = freemidiUrls(entry);
+        setTrack({ title: entry.title, artist: entry.artist, url: urls.getter, downloadPage: urls.downloadPage });
+      };
+      if (pressed(kb.nextTrack, input, key)) {
+        const entry = randomOtherTrack(catalog, track.url);
+        if (entry) goToTrack(entry);
+        return;
+      }
+      if (pressed(kb.prevTrack, input, key)) {
+        const idx = catalog.findIndex((t) => freemidiUrls(t).getter === track.url);
+        const entry = catalog[(idx - 1 + catalog.length) % catalog.length];
+        if (entry) goToTrack(entry);
+        return;
+      }
+    }
+
     if (!g.started || g.gameOver) {
-      if (input === 'r' || input === ' ') reset();
+      if (pressed(kb.restart, input, key) || pressed(kb.pause, input, key)) reset();
       return;
     }
 
-    if (input === ' ') { stateRef.current = { ...g, paused: !g.paused }; forceUpdate(); return; }
-    if (input === 'r') { reset(); return; }
+    if (pressed(kb.pause, input, key)) { stateRef.current = { ...g, paused: !g.paused }; forceUpdate(); return; }
+    if (pressed(kb.restart, input, key)) { reset(); return; }
 
     const lastDir = g.dirQueue[g.dirQueue.length - 1] ?? g.dir;
     let next: Dir | null = null;
-    if (input === 'w' && lastDir.dy !== 1)  next = DIRS.up;
-    else if (input === 's' && lastDir.dy !== -1) next = DIRS.down;
-    else if (input === 'a' && lastDir.dx !== 1)  next = DIRS.left;
-    else if (input === 'd' && lastDir.dx !== -1) next = DIRS.right;
+    if (pressed(kb.up, input, key) && lastDir.dy !== 1)       next = DIRS.up;
+    else if (pressed(kb.down, input, key) && lastDir.dy !== -1)  next = DIRS.down;
+    else if (pressed(kb.left, input, key) && lastDir.dx !== 1)   next = DIRS.left;
+    else if (pressed(kb.right, input, key) && lastDir.dx !== -1) next = DIRS.right;
     if (next && g.dirQueue.length < 2) {
       stateRef.current = { ...g, dirQueue: [...g.dirQueue, next] };
     }
@@ -297,6 +376,9 @@ export const SnakeGame = ({
         onApply={(cfg: MusicConfig) => {
           if (cfg.musicVolume !== musicVolume && bgMusic.current) {
             bgMusic.current = setMusicVolume(bgMusic.current, cfg.musicVolume);
+            bgMusic.current.proc.on('exit', (_code, signal) => {
+              if (signal == null && autoPlayRef.current) nextTrackRef.current();
+            });
           }
           if (cfg.musicVolume !== musicVolume) {
             setSnakeMusicVolume(cfg.musicVolume, settingsFile);
@@ -333,8 +415,8 @@ export const SnakeGame = ({
     <Box flexDirection="column" paddingX={1}>
       <Box gap={2}>
         <Text bold color={c.accent}>Snake</Text>
-        <Text dimColor>Score: <Text bold>{score}</Text></Text>
-        {highScore > 0 && <Text dimColor>Best: <Text bold>{highScore}</Text></Text>}
+        <Text color="white">Score: <Text bold>{score}</Text></Text>
+        {highScore > 0 && <Text color="white">Best: <Text bold>{highScore}</Text></Text>}
         {paused && <Text color="yellow"> PAUSED</Text>}
       </Box>
       {music && (
@@ -382,11 +464,14 @@ export const SnakeGame = ({
       )}
       {started && !gameOver && (
         <Text dimColor>
-          WASD to move · Space to pause · R to restart{music ? ' · M for music' : ''}
+          {displayKey(kb.up[0]!)}/{displayKey(kb.down[0]!)}/{displayKey(kb.left[0]!)}/{displayKey(kb.right[0]!)} to move
+          {' · '}{displayKey(kb.pause[0]!)} to pause
+          {' · '}{displayKey(kb.restart[0]!)} to restart
+          {music ? ` · ${displayKey(kb.music[0]!)} menu` : ''}
         </Text>
       )}
-      {!started && music && <Text dimColor>M to change music</Text>}
-      {onExit && <Text dimColor>Press <Text bold>Q</Text> to exit</Text>}
+      {!started && music && <Text dimColor>{displayKey(kb.music[0]!)} to change music</Text>}
+      {onExit && <Text dimColor>Press <Text bold>{displayKey(kb.quit[0]!)}</Text> to exit</Text>}
     </Box>
   );
 };

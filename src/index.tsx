@@ -11,8 +11,8 @@
  */
 
 export { SnakeGame } from './SnakeGame.js';
-export type { SnakeColors } from './types.js';
-export { DEFAULT_COLORS } from './types.js';
+export type { SnakeColors, SnakeKeybindings } from './types.js';
+export { DEFAULT_COLORS, DEFAULT_KEYBINDINGS } from './types.js';
 export type { SelectedTrack, MusicConfig } from './MusicSettings.js';
 export type { MidiTrack } from './freemidi-catalog.js';
 export { MIDI_CATALOG, DEFAULT_TRACK_ID, FALLBACK_TRACK, freemidiUrls } from './freemidi-catalog.js';

@@ -37,7 +37,7 @@ export const FALLBACK_TRACK: MidiTrack & { directUrl: string } = {
 };
 
 /** Default selected track. */
-export const DEFAULT_TRACK_ID = 28946; // Abracadabra — Lady Gaga
+export const DEFAULT_TRACK_ID = 11747; // Bad Romance — Lady Gaga
 
 export const MIDI_CATALOG: MidiTrack[] = [
   // Lady Gaga — verified from https://freemidi.org/artist-1586-lady-gaga
@@ -116,6 +116,12 @@ export const MIDI_CATALOG: MidiTrack[] = [
   { id: 4151,  title: 'We Belong Together',       artist: 'Mariah Carey',    slug: 'we-belong-together-mariah-carey' },
   { id: 12750, title: 'My Heart Will Go On',      artist: 'Celine Dion',     slug: 'my-heart-will-go-on-celine-dion' },
   { id: 2415,  title: 'The Power of Love',        artist: 'Celine Dion',     slug: 'power-of-love-celine-dion' },
+
+  // Taylor Swift
+  { id: 13607, title: 'Shake It Off',       artist: 'Taylor Swift', slug: 'shake-it-off-taylor-swift' },
+  { id: 11750, title: 'Love Story',          artist: 'Taylor Swift', slug: 'love-story-taylor-swift' },
+  { id: 25205, title: 'Blank Space',         artist: 'Taylor Swift', slug: 'blank-space-taylor-swift' },
+  { id: 12257, title: 'You Belong With Me',  artist: 'Taylor Swift', slug: 'you-belong-with-me-taylor-swift' },
 
   // 2000s pop
   { id: 2257,  title: '...Baby One More Time',    artist: 'Britney Spears', slug: 'baby-one-more-time-britney-spears' },

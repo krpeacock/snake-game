@@ -258,6 +258,9 @@ export const MusicSettings = ({ initial, onApply, onCancel, accentColor, tracks 
             <Text dimColor>Enter select</Text>
             <Text dimColor>Esc cancel</Text>
           </Box>
+          <Box marginTop={1}>
+            <Text dimColor>tip: use "[" or "]" to go back or forward songs</Text>
+          </Box>
         </Box>
       )}
     </Box>
