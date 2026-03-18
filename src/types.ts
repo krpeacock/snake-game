@@ -19,6 +19,8 @@ export interface SnakeKeybindings {
   nextTrack?: string[];
   /** Keys to skip to previous track (default: ['[']) */
   prevTrack?: string[];
+  /** Keys to toggle track loop (default: ['l']) */
+  loopTrack?: string[];
 }
 
 export const DEFAULT_KEYBINDINGS: Required<SnakeKeybindings> = {
@@ -32,6 +34,7 @@ export const DEFAULT_KEYBINDINGS: Required<SnakeKeybindings> = {
   quit:      ['q'],
   nextTrack: [']'],
   prevTrack: ['['],
+  loopTrack: ['l'],
 };
 
 export function resolveKeybindings(kb?: SnakeKeybindings): Required<SnakeKeybindings> {
@@ -47,6 +50,7 @@ export function resolveKeybindings(kb?: SnakeKeybindings): Required<SnakeKeybind
     quit:      kb.quit      ?? DEFAULT_KEYBINDINGS.quit,
     nextTrack: kb.nextTrack ?? DEFAULT_KEYBINDINGS.nextTrack,
     prevTrack: kb.prevTrack ?? DEFAULT_KEYBINDINGS.prevTrack,
+    loopTrack: kb.loopTrack ?? DEFAULT_KEYBINDINGS.loopTrack,
   };
 }
 

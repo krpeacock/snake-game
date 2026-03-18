@@ -33,6 +33,7 @@ export interface MusicConfig {
   musicVolume: number;
   tinkVolume: number;
   sfxVolume: number;
+  loopEnabled: boolean;
 }
 
 function trackToSelected(track: MidiTrack): SelectedTrack {
@@ -68,6 +69,8 @@ const VOICES = [
   { key: 'sfxVolume'  as const, label: 'SFX (eat / die)' },
 ];
 
+const LOOP_ROW_IDX = VOICES.length; // index of the loop toggle row
+
 interface MusicSettingsProps {
   initial: MusicConfig;
   onApply: (config: MusicConfig) => void;
@@ -82,6 +85,7 @@ export const MusicSettings = ({ initial, onApply, onCancel, accentColor, tracks 
   const catalog = tracks ?? MIDI_CATALOG;
   const [section, setSection] = useState<Section>('tracks');
   const [voiceFocus, setVoiceFocus] = useState(0);
+  const [loopEnabled, setLoopEnabled] = useState(initial.loopEnabled);
   const [volumes, setVolumes] = useState({
     musicVolume: initial.musicVolume,
     tinkVolume: initial.tinkVolume,
@@ -113,7 +117,7 @@ export const MusicSettings = ({ initial, onApply, onCancel, accentColor, tracks 
   const visible = filtered.slice(scrollOffset, scrollOffset + VISIBLE_ROWS);
 
   const apply = (track: SelectedTrack) => {
-    onApply({ track, ...volumes });
+    onApply({ track, ...volumes, loopEnabled });
   };
 
   useInput((input, key) => {
@@ -126,8 +130,13 @@ export const MusicSettings = ({ initial, onApply, onCancel, accentColor, tracks 
 
     if (section === 'volumes') {
       if (key.upArrow)   { setVoiceFocus((f) => Math.max(0, f - 1)); return; }
-      if (key.downArrow) { setVoiceFocus((f) => Math.min(VOICES.length - 1, f + 1)); return; }
-      if (key.leftArrow || key.rightArrow) {
+      if (key.downArrow) { setVoiceFocus((f) => Math.min(LOOP_ROW_IDX, f + 1)); return; }
+      if (key.leftArrow || key.rightArrow || key.return) {
+        if (voiceFocus === LOOP_ROW_IDX) {
+          setLoopEnabled((v) => !v);
+          return;
+        }
+        if (key.return) { apply(selectedTrack); return; }
         const voice = VOICES[voiceFocus];
         if (!voice) return;
         const delta = key.leftArrow ? -VOLUME_STEP : VOLUME_STEP;
@@ -207,9 +216,27 @@ export const MusicSettings = ({ initial, onApply, onCancel, accentColor, tracks 
               </Box>
             );
           })}
+          {(() => {
+            const isFocused = voiceFocus === LOOP_ROW_IDX;
+            return (
+              <Box gap={2}>
+                <Text color={isFocused ? accent : undefined} dimColor={!isFocused}>
+                  {isFocused ? '▶' : ' '}
+                </Text>
+                <Box width={18}>
+                  <Text color={isFocused ? accent : undefined} dimColor={!isFocused}>
+                    Loop track
+                  </Text>
+                </Box>
+                <Text color={isFocused ? accent : undefined} dimColor={!isFocused}>
+                  {loopEnabled ? '● On ' : '○ Off'}
+                </Text>
+              </Box>
+            );
+          })()}
           <Box marginTop={1} gap={2}>
-            <Text dimColor>↑↓ select voice</Text>
-            <Text dimColor>← → adjust</Text>
+            <Text dimColor>↑↓ select</Text>
+            <Text dimColor>← →/Enter toggle loop</Text>
             <Text dimColor>Enter apply</Text>
             <Text dimColor>Esc cancel</Text>
           </Box>
@@ -259,7 +286,7 @@ export const MusicSettings = ({ initial, onApply, onCancel, accentColor, tracks 
             <Text dimColor>Esc cancel</Text>
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>tip: use "[" or "]" to go back or forward songs</Text>
+            <Text dimColor>tip: use "[" or "]" to go back or forward songs · "L" to toggle loop</Text>
           </Box>
         </Box>
       )}

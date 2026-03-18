@@ -66,3 +66,39 @@ export function setSnakeSfxVolume(volume: number, configPath?: string): void {
   config['sfx_volume'] = Math.max(0, Math.min(1, volume));
   writeConfig(config, configPath);
 }
+
+export function getSnakeLoopEnabled(configPath?: string): boolean {
+  return readConfig(configPath)['loop_enabled'] === true;
+}
+
+export function setSnakeLoopEnabled(enabled: boolean, configPath?: string): void {
+  const config = readConfig(configPath);
+  config['loop_enabled'] = enabled;
+  writeConfig(config, configPath);
+}
+
+export interface LastTrack {
+  title: string;
+  artist: string;
+  url: string;
+  downloadPage?: string;
+}
+
+export function getSnakeLastTrack(configPath?: string): LastTrack | null {
+  const t = readConfig(configPath)['last_track'];
+  if (!t || typeof t !== 'object') return null;
+  const track = t as Record<string, unknown>;
+  if (typeof track['url'] !== 'string' || !track['url']) return null;
+  return {
+    title: typeof track['title'] === 'string' ? track['title'] : '',
+    artist: typeof track['artist'] === 'string' ? track['artist'] : '',
+    url: track['url'],
+    downloadPage: typeof track['downloadPage'] === 'string' ? track['downloadPage'] : undefined,
+  };
+}
+
+export function setSnakeLastTrack(track: LastTrack, configPath?: string): void {
+  const config = readConfig(configPath);
+  config['last_track'] = track;
+  writeConfig(config, configPath);
+}

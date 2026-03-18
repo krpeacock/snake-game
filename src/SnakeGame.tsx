@@ -18,6 +18,10 @@ import {
   setSnakeTinkVolume,
   getSnakeSfxVolume,
   setSnakeSfxVolume,
+  getSnakeLoopEnabled,
+  setSnakeLoopEnabled,
+  getSnakeLastTrack,
+  setSnakeLastTrack,
 } from './settings.js';
 import {
   warmNotes, playNote, playSystemSound, SYSTEM_SOUNDS,
@@ -57,7 +61,9 @@ function displayKey(k: string): string {
   return KEY_LABELS[k] ?? k.toUpperCase();
 }
 
-function resolveDefaultTrack(catalog: MidiTrack[]): SelectedTrack {
+function resolveDefaultTrack(catalog: MidiTrack[], settingsFile?: string): SelectedTrack {
+  const last = getSnakeLastTrack(settingsFile);
+  if (last) return last;
   const entry = catalog.find((t) => t.id === DEFAULT_TRACK_ID) ?? catalog[0];
   if (!entry) return { title: 'No tracks', artist: '', url: '' };
   const urls = freemidiUrls(entry);
@@ -196,14 +202,25 @@ export const SnakeGame = ({
   const [highScore, setHighScore] = useState(0);
   const bgMusic = useRef<BgMusicHandle | null>(null);
   const [bpm, setBpm] = useState(DEFAULT_BPM);
-  const [track, setTrack] = useState<SelectedTrack>(() => resolveDefaultTrack(catalog));
+  const [track, setTrack] = useState<SelectedTrack>(() => resolveDefaultTrack(catalog, settingsFile));
   const [showSettings, setShowSettings] = useState(false);
   const autoPlayRef = useRef(true);
   const nextTrackRef = useRef<() => void>(() => {});
+  const [loopEnabled, setLoopEnabled] = useState(() => getSnakeLoopEnabled(settingsFile));
+  const loopRef = useRef(loopEnabled);
+  const [trackRevision, setTrackRevision] = useState(0);
   const [beatPhase, setBeatPhase] = useState(0);
   const [musicVolume, setMusicVolumeState] = useState(() => getSnakeMusicVolume(settingsFile));
   const [tinkVolume,  setTinkVolumeState]  = useState(() => getSnakeTinkVolume(settingsFile));
   const [sfxVolume,   setSfxVolumeState]   = useState(() => getSnakeSfxVolume(settingsFile));
+
+  // Keep loopRef in sync with state
+  useEffect(() => { loopRef.current = loopEnabled; }, [loopEnabled]);
+
+  // Persist the current track whenever it changes
+  useEffect(() => {
+    if (track.url) setSnakeLastTrack(track, settingsFile);
+  }, [track]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep nextTrackRef pointed at a stable "advance to next track" callback
   useEffect(() => {
@@ -230,7 +247,13 @@ export const SnakeGame = ({
       if (handle) {
         setBpm(handle.bpm);
         handle.proc.on('exit', (_code, signal) => {
-          if (signal == null && autoPlayRef.current) nextTrackRef.current();
+          if (signal == null && autoPlayRef.current) {
+            if (loopRef.current) {
+              setTrackRevision((r) => r + 1);
+            } else {
+              nextTrackRef.current();
+            }
+          }
         });
       }
     });
@@ -240,7 +263,7 @@ export const SnakeGame = ({
       stopBgMusic(bgMusic.current);
       bgMusic.current = null;
     };
-  }, [track, music]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [track, music, trackRevision]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const saved = getSnakeHighScore(settingsFile);
@@ -346,6 +369,13 @@ export const SnakeGame = ({
         if (entry) goToTrack(entry);
         return;
       }
+      if (pressed(kb.loopTrack, input, key)) {
+        const next = !loopRef.current;
+        loopRef.current = next;
+        setLoopEnabled(next);
+        setSnakeLoopEnabled(next, settingsFile);
+        return;
+      }
     }
 
     if (!g.started || g.gameOver) {
@@ -370,14 +400,16 @@ export const SnakeGame = ({
   if (showSettings) {
     return (
       <MusicSettings
-        initial={{ track, musicVolume, tinkVolume, sfxVolume }}
+        initial={{ track, musicVolume, tinkVolume, sfxVolume, loopEnabled }}
         accentColor={c.accent}
         tracks={catalog}
         onApply={(cfg: MusicConfig) => {
           if (cfg.musicVolume !== musicVolume && bgMusic.current) {
             bgMusic.current = setMusicVolume(bgMusic.current, cfg.musicVolume);
             bgMusic.current.proc.on('exit', (_code, signal) => {
-              if (signal == null && autoPlayRef.current) nextTrackRef.current();
+              if (signal == null && autoPlayRef.current) {
+                if (loopRef.current) { setTrackRevision((r) => r + 1); } else { nextTrackRef.current(); }
+              }
             });
           }
           if (cfg.musicVolume !== musicVolume) {
@@ -391,6 +423,11 @@ export const SnakeGame = ({
           if (cfg.sfxVolume !== sfxVolume) {
             setSnakeSfxVolume(cfg.sfxVolume, settingsFile);
             setSfxVolumeState(cfg.sfxVolume);
+          }
+          if (cfg.loopEnabled !== loopEnabled) {
+            loopRef.current = cfg.loopEnabled;
+            setLoopEnabled(cfg.loopEnabled);
+            setSnakeLoopEnabled(cfg.loopEnabled, settingsFile);
           }
           if (cfg.track.url !== track.url) setTrack(cfg.track);
           setShowSettings(false);
@@ -426,6 +463,7 @@ export const SnakeGame = ({
             <Text dimColor>{track.title}</Text>
             <Text dimColor>—</Text>
             <Text dimColor>{track.artist}</Text>
+            {loopEnabled && <Text dimColor>⟳</Text>}
           </Box>
           <MusicVisualizer beatPhase={beatPhase} active={started && !paused && !gameOver} beatColors={c.beat} />
         </>
