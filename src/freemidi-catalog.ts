@@ -128,7 +128,6 @@ export const MIDI_CATALOG: MidiTrack[] = [
   { id: 2256,  title: 'Toxic',                    artist: 'Britney Spears', slug: 'toxic-britney-spears' },
   { id: 2265,  title: "Oops!... I Did It Again",  artist: 'Britney Spears', slug: 'oops-i-did-it-again-britney-spears' },
   { id: 1244,  title: 'Crazy in Love',            artist: 'Beyoncé',        slug: 'crazy-in-love-beyonce' },
-  { id: 11736, title: 'Single Ladies',            artist: 'Beyoncé',        slug: 'single-ladies-beyonce' },
   { id: 16275, title: 'Halo',                     artist: 'Beyoncé',        slug: 'halo-beyonce' },
   { id: 11406, title: 'Umbrella',                 artist: 'Rihanna',        slug: 'umbrella-rihanna' },
   { id: 15528, title: 'Diamonds',                 artist: 'Rihanna',        slug: 'diamonds-rihanna' },

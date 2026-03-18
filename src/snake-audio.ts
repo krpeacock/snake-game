@@ -2,11 +2,12 @@
  * snake-audio.ts — Audio for the Snake game.
  *
  * Background music: synthesizes a MIDI file to WAV via a self-contained
- * child script (snake-synth.mjs, ~1s), then streams it with afplay.
- * Zero runtime npm dependencies — pure Node.js + afplay (macOS built-in).
+ * child script (snake-synth.mjs, ~1s), then streams it with afplay (macOS)
+ * or aplay (Linux).
+ * Zero runtime npm dependencies — pure Node.js + platform audio tools.
  *
  * Per-note tink: pre-generated sine-wave WAVs for the chord-per-tick overlay.
- * System sounds: macOS .aiff files for eat / die events.
+ * System sounds: macOS .aiff files (eat/die) on macOS; terminal bell on Linux.
  *
  * freemidi.org requires a two-step fetch:
  *   1. GET download page → grab PHPSESSID cookie
@@ -71,6 +72,26 @@ async function fetchMidiBytes(midiUrl: string, downloadPage?: string): Promise<B
   return Buffer.from(await midiRes.arrayBuffer());
 }
 
+// ── Platform audio helpers ────────────────────────────────────────────
+
+const PLATFORM = process.platform;
+
+/** Spawn a WAV player appropriate for the current platform. Returns null if unsupported. */
+function spawnWavPlayer(
+  wavPath: string,
+  volume: number,
+  opts: { detached?: boolean } = {},
+): ReturnType<typeof spawn> | null {
+  if (PLATFORM === 'darwin') {
+    return spawn('afplay', [wavPath, '-v', String(volume)], { stdio: 'ignore', ...opts });
+  }
+  if (PLATFORM === 'linux') {
+    // aplay doesn't support volume; the system mixer controls output level
+    return spawn('aplay', ['-q', wavPath], { stdio: 'ignore', ...opts });
+  }
+  return null;
+}
+
 // ── Background music ─────────────────────────────────────────────────
 
 export interface BgMusicHandle {
@@ -93,7 +114,7 @@ export async function startBgMusic(
   volume = 0.4,
   cacheDir?: string,
 ): Promise<BgMusicHandle | null> {
-  if (process.platform !== 'darwin') return null;
+  if (PLATFORM !== 'darwin' && PLATFORM !== 'linux') return null;
 
   const wavPath = wavCachePath(midiUrl, cacheDir);
   let bpm = 120;
@@ -117,7 +138,8 @@ export async function startBgMusic(
       });
       bpm = meta.bpm;
     }
-    const proc = spawn('afplay', [wavPath, '-v', String(volume)], { stdio: 'ignore' });
+    const proc = spawnWavPlayer(wavPath, volume);
+    if (!proc) return null;
     return { proc, bpm, wavPath };
   } catch {
     return null;
@@ -134,7 +156,7 @@ export function stopBgMusic(handle: BgMusicHandle | null): void {
  */
 export function setMusicVolume(handle: BgMusicHandle, volume: number): BgMusicHandle {
   handle.proc.kill();
-  const proc = spawn('afplay', [handle.wavPath, '-v', String(volume)], { stdio: 'ignore' });
+  const proc = spawnWavPlayer(handle.wavPath, volume) ?? handle.proc;
   return { ...handle, proc };
 }
 
@@ -182,18 +204,21 @@ export function warmNotes(notes: number[], cacheDir?: string): void {
 }
 
 export function playNote(note: number, volume = 1, cacheDir?: string): void {
-  if (process.platform !== 'darwin') { process.stdout.write('\x07'); return; }
+  if (PLATFORM !== 'darwin' && PLATFORM !== 'linux') { process.stdout.write('\x07'); return; }
   const dir = soundsDir(cacheDir);
   const path = noteFile(note, cacheDir);
   if (!existsSync(path)) { mkdirSync(dir, { recursive: true }); writeFileSync(path, buildWav(midiToFreq(note))); }
-  spawn('afplay', [path, '-v', String(volume)], { detached: true, stdio: 'ignore' }).unref();
+  spawnWavPlayer(path, volume, { detached: true })?.unref();
 }
 
 // ── System sounds ─────────────────────────────────────────────────────
 
 export function playSystemSound(file: string, volume = 1): void {
-  if (process.platform !== 'darwin') { process.stdout.write('\x07'); return; }
-  spawn('afplay', [file, '-v', String(volume)], { detached: true, stdio: 'ignore' }).unref();
+  if (PLATFORM === 'darwin') {
+    spawn('afplay', [file, '-v', String(volume)], { detached: true, stdio: 'ignore' }).unref();
+  } else {
+    process.stdout.write('\x07');
+  }
 }
 
 export const SYSTEM_SOUNDS = {

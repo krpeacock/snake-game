@@ -452,8 +452,8 @@ export const SnakeGame = ({
     <Box flexDirection="column" paddingX={1}>
       <Box gap={2}>
         <Text bold color={c.accent}>Snake</Text>
-        <Text color="white">Score: <Text bold>{score}</Text></Text>
-        {highScore > 0 && <Text color="white">Best: <Text bold>{highScore}</Text></Text>}
+        <Text color={c.accent}>Score: <Text bold>{score}</Text></Text>
+        {highScore > 0 && <Text color={c.accent}>Best: <Text bold>{highScore}</Text></Text>}
         {paused && <Text color="yellow"> PAUSED</Text>}
       </Box>
       {music && (
@@ -509,7 +509,7 @@ export const SnakeGame = ({
         </Text>
       )}
       {!started && music && <Text dimColor>{displayKey(kb.music[0]!)} to change music</Text>}
-      {onExit && <Text dimColor>Press <Text bold>{displayKey(kb.quit[0]!)}</Text> to exit</Text>}
+      {onExit && <Text dimColor>Press <Text bold color={c.accent}>{displayKey(kb.quit[0]!)}</Text> to exit</Text>}
     </Box>
   );
 };
