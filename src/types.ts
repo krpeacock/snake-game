@@ -1,9 +1,9 @@
 export interface SnakeKeybindings {
-  /** Keys to move up (default: ['w', 'up']) */
+  /** Keys to move up (default: ['w', 'k', 'up']) */
   up?: string[];
-  /** Keys to move down (default: ['s', 'down']) */
+  /** Keys to move down (default: ['s', 'j', 'down']) */
   down?: string[];
-  /** Keys to move left (default: ['a', 'left']) */
+  /** Keys to move left (default: ['a', 'h', 'left']) */
   left?: string[];
   /** Keys to move right (default: ['d', 'right']) */
   right?: string[];
@@ -24,9 +24,9 @@ export interface SnakeKeybindings {
 }
 
 export const DEFAULT_KEYBINDINGS: Required<SnakeKeybindings> = {
-  up:        ['w', 'up'],
-  down:      ['s', 'down'],
-  left:      ['a', 'left'],
+  up:        ['w', 'k', 'up'],
+  down:      ['s', 'j', 'down'],
+  left:      ['a', 'h', 'left'],
   right:     ['d', 'right'],
   pause:     [' '],
   restart:   ['r'],
