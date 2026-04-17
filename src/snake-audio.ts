@@ -2,19 +2,24 @@
  * snake-audio.ts — Audio for the Snake game.
  *
  * Background music: synthesizes a MIDI file to WAV via a self-contained
- * child script (snake-synth.mjs, ~1s), then streams it with afplay (macOS)
- * or aplay (Linux).
- * Zero runtime npm dependencies — pure Node.js + platform audio tools.
+ * child script (snake-synth.mjs, ~1s), then streams it with the best
+ * available WAV player for the platform.
  *
- * Per-note tink: pre-generated sine-wave WAVs for the chord-per-tick overlay.
- * System sounds: macOS .aiff files (eat/die) on macOS; terminal bell on Linux.
+ * Playback:
+ *   macOS  — afplay (built-in, supports volume)
+ *   Linux  — paplay > ffplay > aplay (detected once, first with volume wins)
+ *
+ * Per-note tink & system sounds (eat/die) are synthesized as short sine-wave
+ * WAVs at runtime and played through the same player. No platform-specific
+ * audio files are bundled, so the eat/die sounds work on every platform
+ * that has a supported WAV player.
  *
  * freemidi.org requires a two-step fetch:
  *   1. GET download page → grab PHPSESSID cookie
  *   2. GET getter URL with Cookie + Referer headers → raw MIDI bytes
  */
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -76,18 +81,63 @@ async function fetchMidiBytes(midiUrl: string, downloadPage?: string): Promise<B
 
 const PLATFORM = process.platform;
 
+type LinuxPlayer = 'paplay' | 'ffplay' | 'aplay' | null;
+let linuxPlayerCache: LinuxPlayer | undefined;
+
+function commandExists(cmd: string): boolean {
+  const r = spawnSync('which', [cmd], { stdio: 'ignore' });
+  return r.status === 0;
+}
+
+/**
+ * Detect the best available Linux audio player, once per process.
+ * Preference order:
+ *   paplay — PulseAudio / PipeWire, ubiquitous on desktop Linux, volume via --volume
+ *   ffplay — ffmpeg, common in dev envs, volume via -volume
+ *   aplay  — ALSA, always available but no per-stream volume
+ */
+function detectLinuxPlayer(): LinuxPlayer {
+  if (linuxPlayerCache !== undefined) return linuxPlayerCache;
+  if (commandExists('paplay')) linuxPlayerCache = 'paplay';
+  else if (commandExists('ffplay')) linuxPlayerCache = 'ffplay';
+  else if (commandExists('aplay')) linuxPlayerCache = 'aplay';
+  else linuxPlayerCache = null;
+  return linuxPlayerCache;
+}
+
+function clampVolume(v: number): number {
+  return Math.max(0, Math.min(1, v));
+}
+
 /** Spawn a WAV player appropriate for the current platform. Returns null if unsupported. */
 function spawnWavPlayer(
   wavPath: string,
   volume: number,
   opts: { detached?: boolean } = {},
 ): ReturnType<typeof spawn> | null {
+  const v = clampVolume(volume);
   if (PLATFORM === 'darwin') {
-    return spawn('afplay', [wavPath, '-v', String(volume)], { stdio: 'ignore', ...opts });
+    return spawn('afplay', [wavPath, '-v', String(v)], { stdio: 'ignore', ...opts });
   }
   if (PLATFORM === 'linux') {
-    // aplay doesn't support volume; the system mixer controls output level
-    return spawn('aplay', ['-q', wavPath], { stdio: 'ignore', ...opts });
+    const player = detectLinuxPlayer();
+    if (player === 'paplay') {
+      // paplay volume is a linear 0-65536 scale (65536 = 100%)
+      const vol = Math.round(v * 65536);
+      return spawn('paplay', [`--volume=${vol}`, wavPath], { stdio: 'ignore', ...opts });
+    }
+    if (player === 'ffplay') {
+      const vol = Math.round(v * 100);
+      return spawn(
+        'ffplay',
+        ['-autoexit', '-nodisp', '-loglevel', 'quiet', '-volume', String(vol), wavPath],
+        { stdio: 'ignore', ...opts },
+      );
+    }
+    if (player === 'aplay') {
+      // aplay has no volume flag; relies on the system mixer
+      return spawn('aplay', ['-q', wavPath], { stdio: 'ignore', ...opts });
+    }
   }
   return null;
 }
@@ -160,34 +210,60 @@ export function setMusicVolume(handle: BgMusicHandle, volume: number): BgMusicHa
   return { ...handle, proc };
 }
 
-// ── Per-note fallback (sine-wave WAVs via afplay) ─────────────────────
+// ── Sine-wave synthesis (tinks + system sounds) ───────────────────────
 
 const SAMPLE_RATE = 44100;
 const DURATION_S  = 0.09;
+
+interface NoteSpec {
+  /** MIDI note number (e.g. 69 = A4) */
+  note: number;
+  /** Duration in seconds */
+  duration: number;
+}
 
 function midiToFreq(note: number): number {
   return 440 * Math.pow(2, (note - 69) / 12);
 }
 
-function buildWav(freq: number): Buffer {
-  const numSamples = Math.floor(SAMPLE_RATE * DURATION_S);
-  const dataSize   = numSamples * 2;
-  const buf        = Buffer.alloc(44 + dataSize);
-
+function writeWavHeader(buf: Buffer, dataSize: number): void {
   buf.write('RIFF', 0); buf.writeUInt32LE(36 + dataSize, 4); buf.write('WAVE', 8);
   buf.write('fmt ', 12); buf.writeUInt32LE(16, 16);
   buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22);
   buf.writeUInt32LE(SAMPLE_RATE, 24); buf.writeUInt32LE(SAMPLE_RATE * 2, 28);
   buf.writeUInt16LE(2, 32); buf.writeUInt16LE(16, 34);
   buf.write('data', 36); buf.writeUInt32LE(dataSize, 40);
+}
 
-  const fadeIn  = Math.floor(SAMPLE_RATE * 0.005);
-  const fadeOut = Math.floor(SAMPLE_RATE * 0.02);
-  for (let i = 0; i < numSamples; i++) {
-    const env = Math.min(i / fadeIn, 1) * Math.min((numSamples - i) / fadeOut, 1);
-    buf.writeInt16LE(Math.round(28000 * env * Math.sin((2 * Math.PI * freq * i) / SAMPLE_RATE)), 44 + i * 2);
+/** Render a sequence of notes played one after another, each with a short fade. */
+function buildSequenceWav(specs: NoteSpec[]): Buffer {
+  const segments = specs.map((s) => ({
+    freq: midiToFreq(s.note),
+    numSamples: Math.floor(SAMPLE_RATE * s.duration),
+  }));
+  const totalSamples = segments.reduce((sum, s) => sum + s.numSamples, 0);
+  const dataSize = totalSamples * 2;
+  const buf = Buffer.alloc(44 + dataSize);
+  writeWavHeader(buf, dataSize);
+
+  let offset = 0;
+  for (const seg of segments) {
+    const fadeIn  = Math.min(Math.floor(SAMPLE_RATE * 0.005), Math.floor(seg.numSamples / 4));
+    const fadeOut = Math.min(Math.floor(SAMPLE_RATE * 0.02),  Math.floor(seg.numSamples / 2));
+    for (let i = 0; i < seg.numSamples; i++) {
+      const env = Math.min(i / fadeIn, 1) * Math.min((seg.numSamples - i) / fadeOut, 1);
+      buf.writeInt16LE(
+        Math.round(28000 * env * Math.sin((2 * Math.PI * seg.freq * i) / SAMPLE_RATE)),
+        44 + (offset + i) * 2,
+      );
+    }
+    offset += seg.numSamples;
   }
   return buf;
+}
+
+function buildNoteWav(note: number): Buffer {
+  return buildSequenceWav([{ note, duration: DURATION_S }]);
 }
 
 function noteFile(note: number, cacheDir?: string): string {
@@ -199,7 +275,7 @@ export function warmNotes(notes: number[], cacheDir?: string): void {
   mkdirSync(dir, { recursive: true });
   for (const note of [...new Set(notes)]) {
     const path = noteFile(note, cacheDir);
-    if (!existsSync(path)) writeFileSync(path, buildWav(midiToFreq(note)));
+    if (!existsSync(path)) writeFileSync(path, buildNoteWav(note));
   }
 }
 
@@ -207,21 +283,50 @@ export function playNote(note: number, volume = 1, cacheDir?: string): void {
   if (PLATFORM !== 'darwin' && PLATFORM !== 'linux') { process.stdout.write('\x07'); return; }
   const dir = soundsDir(cacheDir);
   const path = noteFile(note, cacheDir);
-  if (!existsSync(path)) { mkdirSync(dir, { recursive: true }); writeFileSync(path, buildWav(midiToFreq(note))); }
+  if (!existsSync(path)) { mkdirSync(dir, { recursive: true }); writeFileSync(path, buildNoteWav(note)); }
   spawnWavPlayer(path, volume, { detached: true })?.unref();
 }
 
 // ── System sounds ─────────────────────────────────────────────────────
 
-export function playSystemSound(file: string, volume = 1): void {
-  if (PLATFORM === 'darwin') {
-    spawn('afplay', [file, '-v', String(volume)], { detached: true, stdio: 'ignore' }).unref();
-  } else {
-    process.stdout.write('\x07');
-  }
+export const SYSTEM_SOUNDS = {
+  eat: 'eat',
+  die: 'die',
+} as const;
+
+export type SystemSoundKey = typeof SYSTEM_SOUNDS[keyof typeof SYSTEM_SOUNDS];
+
+const SYSTEM_SOUND_SPECS: Record<SystemSoundKey, NoteSpec[]> = {
+  // Ascending major triad — short, upbeat "yum"
+  eat: [
+    { note: 72, duration: 0.05 }, // C5
+    { note: 76, duration: 0.05 }, // E5
+    { note: 79, duration: 0.10 }, // G5
+  ],
+  // Descending minor triad — somber "game over"
+  die: [
+    { note: 67, duration: 0.10 }, // G4
+    { note: 63, duration: 0.10 }, // Eb4
+    { note: 60, duration: 0.25 }, // C4
+  ],
+};
+
+function systemSoundFile(key: SystemSoundKey, cacheDir?: string): string {
+  return join(soundsDir(cacheDir), `system-${key}.wav`);
 }
 
-export const SYSTEM_SOUNDS = {
-  eat: '/System/Library/Sounds/Glass.aiff',
-  die: '/System/Library/Sounds/Funk.aiff',
-};
+function ensureSystemSound(key: SystemSoundKey, cacheDir?: string): string {
+  const path = systemSoundFile(key, cacheDir);
+  if (!existsSync(path)) {
+    mkdirSync(soundsDir(cacheDir), { recursive: true });
+    writeFileSync(path, buildSequenceWav(SYSTEM_SOUND_SPECS[key]));
+  }
+  return path;
+}
+
+export function playSystemSound(key: string, volume = 1, cacheDir?: string): void {
+  if (PLATFORM !== 'darwin' && PLATFORM !== 'linux') { process.stdout.write('\x07'); return; }
+  if (!(key in SYSTEM_SOUND_SPECS)) return;
+  const path = ensureSystemSound(key as SystemSoundKey, cacheDir);
+  spawnWavPlayer(path, volume, { detached: true })?.unref();
+}

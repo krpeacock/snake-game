@@ -303,7 +303,7 @@ export const SnakeGame = ({
         g.snake.some((s) => s.x === head.x && s.y === head.y)
       ) {
         stateRef.current = { ...g, dir, dirQueue: restQueue, gameOver: true };
-        if (music) playSystemSound(SYSTEM_SOUNDS.die, sfxVolume);
+        if (music) playSystemSound(SYSTEM_SOUNDS.die, sfxVolume, cacheDir);
         forceUpdate();
         return;
       }
@@ -318,7 +318,7 @@ export const SnakeGame = ({
           setSnakeHighScore(newScore, settingsFile);
           setHighScore(newScore);
         }
-        if (music) playSystemSound(SYSTEM_SOUNDS.eat, sfxVolume);
+        if (music) playSystemSound(SYSTEM_SOUNDS.eat, sfxVolume, cacheDir);
       } else {
         if (music) playNote(69, tinkVolume, cacheDir);
       }

@@ -5,8 +5,11 @@ Playable Snake in the terminal with MIDI music synthesis.
 ## Requirements
 
 - Node.js 18+
-- macOS (audio playback uses `afplay`)
 - pnpm (for development)
+- Audio playback:
+  - **macOS** — `afplay` (built-in, supports volume)
+  - **Linux** — one of `paplay` (`pulseaudio-utils`), `ffplay` (`ffmpeg`), or `aplay` (`alsa-utils`). `paplay` / `ffplay` are preferred — they support per-stream volume. `aplay` works but ignores volume settings (output level is controlled by the system mixer).
+  - Other platforms fall back to the terminal bell for system sounds and disable background music.
 
 ## Running
 
