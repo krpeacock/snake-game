@@ -505,10 +505,15 @@ export const SnakeGame = ({
           {displayKey(kb.up[0]!)}/{displayKey(kb.down[0]!)}/{displayKey(kb.left[0]!)}/{displayKey(kb.right[0]!)} to move
           {' · '}{displayKey(kb.pause[0]!)} to pause
           {' · '}{displayKey(kb.restart[0]!)} to restart
-          {music ? ` · ${displayKey(kb.music[0]!)} menu` : ''}
         </Text>
       )}
-      {!started && music && <Text dimColor>{displayKey(kb.music[0]!)} to change music</Text>}
+      {music && (
+        <Text dimColor>
+          {displayKey(kb.music[0]!)} menu
+          {' · '}{displayKey(kb.prevTrack[0]!)}/{displayKey(kb.nextTrack[0]!)} prev/next track
+          {' · '}{displayKey(kb.loopTrack[0]!)} loop
+        </Text>
+      )}
       {onExit && <Text dimColor>Press <Text bold color={c.accent}>{displayKey(kb.quit[0]!)}</Text> to exit</Text>}
     </Box>
   );

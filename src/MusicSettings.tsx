@@ -131,19 +131,18 @@ export const MusicSettings = ({ initial, onApply, onCancel, accentColor, tracks 
     if (section === 'volumes') {
       if (key.upArrow)   { setVoiceFocus((f) => Math.max(0, f - 1)); return; }
       if (key.downArrow) { setVoiceFocus((f) => Math.min(LOOP_ROW_IDX, f + 1)); return; }
-      if (key.leftArrow || key.rightArrow || key.return) {
+      if (key.return) { apply(selectedTrack); return; }
+      if (key.leftArrow || key.rightArrow) {
         if (voiceFocus === LOOP_ROW_IDX) {
           setLoopEnabled((v) => !v);
           return;
         }
-        if (key.return) { apply(selectedTrack); return; }
         const voice = VOICES[voiceFocus];
         if (!voice) return;
         const delta = key.leftArrow ? -VOLUME_STEP : VOLUME_STEP;
         setVolumes((v) => ({ ...v, [voice.key]: snap(v[voice.key] + delta) }));
         return;
       }
-      if (key.return) { apply(selectedTrack); return; }
     }
 
     if (section === 'tracks') {
@@ -236,7 +235,7 @@ export const MusicSettings = ({ initial, onApply, onCancel, accentColor, tracks 
           })()}
           <Box marginTop={1} gap={2}>
             <Text dimColor>↑↓ select</Text>
-            <Text dimColor>← →/Enter toggle loop</Text>
+            <Text dimColor>← → adjust / toggle loop</Text>
             <Text dimColor>Enter apply</Text>
             <Text dimColor>Esc cancel</Text>
           </Box>
